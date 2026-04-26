@@ -40,6 +40,26 @@ MODEL_NAME: str = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 API_KEY:    str = os.environ.get("HF_TOKEN", os.environ.get("OPENAI_API_KEY", "no-key"))
 SERVER_URL: str = os.environ.get("SERVER_URL", "http://localhost:7860")
 
+# ── Fine-tuned LoRA adapter repos ────────────────────────────────────────────
+# Set these as Space Secrets / env vars to use your uploaded adapters.
+# Leave empty to fall back to the base model via API.
+RADAR_ADAPTER_REPO: str = os.environ.get(
+    "RADAR_ADAPTER_REPO",
+    "Bhaskar111/defense-rl-radar-adapter",   # your uploaded radar adapter
+)
+ACTOR_ADAPTER_REPO: str = os.environ.get(
+    "ACTOR_ADAPTER_REPO",
+    "Bhaskar111/defense-rl-actor-adapter",   # your uploaded actor adapter
+)
+# Which checkpoint epoch to load (epoch_1 | epoch_2 | epoch_3)
+ADAPTER_EPOCH: str = os.environ.get("ADAPTER_EPOCH", "epoch_3")
+
+# Resolved inference backend:
+#   "local"  — load model + adapter weights locally (uses RADAR/ACTOR_ADAPTER_REPO)
+#   "api"    — call HuggingFace Inference API (base model, no adapter)
+USE_ADAPTERS: bool = bool(RADAR_ADAPTER_REPO and ACTOR_ADAPTER_REPO)
+BACKEND: str = "local" if USE_ADAPTERS else "api"
+
 SUCCESS_THRESHOLD = 0.80
 
 TASKS = ["task_easy", "task_medium", "task_hard"]
@@ -88,19 +108,56 @@ from agents.actor_agent  import QwenActorAgent
 
 
 def _build_agents() -> tuple:
-    """Initialise Agent 1 (Radar) and Agent 2 (Actor) with HF Inference API."""
-    common = dict(
-        backend    = "api",
-        model_name = MODEL_NAME,
-        api_base   = API_BASE_URL,
-        api_key    = API_KEY,
-        temperature= 0.1,
-    )
-    print(f"[DEBUG] Initialising QwenRadarAgent  → {API_BASE_URL}", flush=True)
-    radar_agent = QwenRadarAgent(**common, max_tokens=512)
+    """Initialise Agent 1 (Radar) and Agent 2 (Actor).
 
-    print(f"[DEBUG] Initialising QwenActorAgent  → {API_BASE_URL}", flush=True)
-    actor_agent = QwenActorAgent(**common, max_tokens=256)
+    If RADAR_ADAPTER_REPO / ACTOR_ADAPTER_REPO are set, loads each agent
+    locally with the fine-tuned LoRA adapter merged into the base model.
+    Otherwise falls back to the HuggingFace Inference API.
+    """
+    if USE_ADAPTERS:
+        print(f"[DEBUG] Adapter mode — loading models locally with LoRA adapters.", flush=True)
+        print(f"[DEBUG]   Base model   : {MODEL_NAME}", flush=True)
+        print(f"[DEBUG]   Radar adapter: {RADAR_ADAPTER_REPO}/{ADAPTER_EPOCH}", flush=True)
+        print(f"[DEBUG]   Actor adapter: {ACTOR_ADAPTER_REPO}/{ADAPTER_EPOCH}", flush=True)
+
+        radar_agent = QwenRadarAgent(
+            backend          = "local",
+            model_name       = MODEL_NAME,
+            api_key          = API_KEY,
+            temperature      = 0.1,
+            max_tokens       = 512,
+            adapter_repo     = RADAR_ADAPTER_REPO,
+            adapter_subfolder= ADAPTER_EPOCH,
+        )
+        actor_agent = QwenActorAgent(
+            backend          = "local",
+            model_name       = MODEL_NAME,
+            api_key          = API_KEY,
+            temperature      = 0.1,
+            max_tokens       = 256,
+            adapter_repo     = ACTOR_ADAPTER_REPO,
+            adapter_subfolder= ADAPTER_EPOCH,
+        )
+    else:
+        print(f"[DEBUG] API mode — calling HF Inference API (no adapter).", flush=True)
+        print(f"[DEBUG] Initialising QwenRadarAgent  → {API_BASE_URL}", flush=True)
+        radar_agent = QwenRadarAgent(
+            backend    = "api",
+            model_name = MODEL_NAME,
+            api_base   = API_BASE_URL,
+            api_key    = API_KEY,
+            temperature= 0.1,
+            max_tokens = 512,
+        )
+        print(f"[DEBUG] Initialising QwenActorAgent  → {API_BASE_URL}", flush=True)
+        actor_agent = QwenActorAgent(
+            backend    = "api",
+            model_name = MODEL_NAME,
+            api_base   = API_BASE_URL,
+            api_key    = API_KEY,
+            temperature= 0.1,
+            max_tokens = 256,
+        )
 
     return radar_agent, actor_agent
 
@@ -341,7 +398,11 @@ async def run_task(
 async def main() -> None:
     print("[DEBUG] Defense-AI Qwen Multi-Agent Inference", flush=True)
     print(f"[DEBUG] Server:    {SERVER_URL}",    flush=True)
-    print(f"[DEBUG] API Base:  {API_BASE_URL}",  flush=True)
+    print(f"[DEBUG] Backend:   {BACKEND}",       flush=True)
+    if USE_ADAPTERS:
+        print(f"[DEBUG] Adapters:  {ADAPTER_EPOCH} (radar={RADAR_ADAPTER_REPO}, actor={ACTOR_ADAPTER_REPO})", flush=True)
+    else:
+        print(f"[DEBUG] API Base:  {API_BASE_URL}",  flush=True)
     print(f"[DEBUG] Model:     {MODEL_NAME}",    flush=True)
     print(f"[DEBUG] Auth:      {'set' if API_KEY != 'no-key' else 'MISSING — set HF_TOKEN'}", flush=True)
 

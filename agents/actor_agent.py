@@ -118,7 +118,8 @@ class QwenActorAgent:
     def __init__(self, backend="rule", model_name="Qwen/Qwen2.5-1.5B-Instruct",
                  api_base="https://api.openai.com/v1", api_key="no-key",
                  device="auto", max_tokens=256, temperature=0.1,
-                 shared_pipeline=None):
+                 shared_pipeline=None,
+                 adapter_repo: str = None, adapter_subfolder: str = "epoch_3"):
         self.backend = backend
         self.model_name = model_name
         self.api_base = api_base
@@ -126,6 +127,8 @@ class QwenActorAgent:
         self.device = device
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.adapter_repo = adapter_repo          # e.g. "Bhaskar111/defense-rl-actor-adapter"
+        self.adapter_subfolder = adapter_subfolder  # e.g. "epoch_3"
         self._pipeline = shared_pipeline  # may share with RadarAgent
         self._client = None
 
@@ -146,6 +149,25 @@ class QwenActorAgent:
                 device_map="auto" if self.device == "auto" else self.device,
                 trust_remote_code=True,
             )
+            # ── Apply LoRA adapter if provided ───────────────────────────────
+            if self.adapter_repo:
+                try:
+                    from peft import PeftModel
+                    print(
+                        f"[ActorAgent] Applying LoRA adapter: {self.adapter_repo} "
+                        f"(subfolder={self.adapter_subfolder})"
+                    )
+                    model = PeftModel.from_pretrained(
+                        model,
+                        self.adapter_repo,
+                        subfolder=self.adapter_subfolder,
+                        is_trainable=False,
+                    )
+                    model = model.merge_and_unload()   # merge weights for faster inference
+                    print("[ActorAgent] LoRA adapter merged successfully.")
+                except Exception as ae:
+                    print(f"[ActorAgent] Adapter load failed ({ae}). Using base model.")
+
             self._pipeline = pipeline("text-generation", model=model, tokenizer=tok,
                                        max_new_tokens=self.max_tokens, temperature=self.temperature,
                                        do_sample=self.temperature > 0)
