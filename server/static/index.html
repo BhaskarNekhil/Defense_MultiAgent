@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Defense-AI | Air Defense Command</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#020a06;--panel:#050f08;--border:#0d3318;--green:#00ff41;--green-dim:#007a1f;
+    --green-glow:#00ff4133;--amber:#ffb300;--red:#ff2233;--blue:#00d4ff;
+    --white:#c8ffd6;--grey:#3a5040;--grid:#0a2010;--purple:#cc44ff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--green);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,65,0.015) 2px,rgba(0,255,65,0.015) 4px);pointer-events:none;z-index:9999;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,#030c06,#020a06);}
+  .logo{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:4px;color:var(--green);text-shadow:0 0 12px var(--green);}
+  .logo span{color:var(--amber);}
+  .status-bar{display:flex;gap:24px;align-items:center;font-size:11px;letter-spacing:1px;}
+  .status-item{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .status-label{color:var(--grey);font-size:9px;}
+  .status-val{color:var(--green);font-weight:bold;}
+  .blink{animation:blink 1s step-end infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .main{display:grid;grid-template-columns:340px 1fr 320px;height:calc(100vh - 53px);}
+  .panel{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+  .panel:last-child{border-right:none;}
+  .panel-header{padding:10px 16px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:3px;color:var(--green-dim);background:#030c06;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  .panel-body{flex:1;overflow-y:auto;padding:12px;}
+  .panel-body::-webkit-scrollbar{width:4px;}
+  .panel-body::-webkit-scrollbar-thumb{background:var(--green-dim);}
+  .center-panel{border-right:1px solid var(--border);display:flex;flex-direction:column;}
+  .radar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:16px;gap:12px;overflow-y:auto;}
+  .radar-scope{position:relative;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,#001a08 0%,#000d04 60%,#020a06 100%);border:2px solid var(--green-dim);box-shadow:0 0 30px var(--green-glow),inset 0 0 30px rgba(0,255,65,0.05);overflow:hidden;flex-shrink:0;}
+  .radar-rings{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 24%,var(--grid) 24.5%,transparent 25%),radial-gradient(circle at 50% 50%,transparent 49%,var(--grid) 49.5%,transparent 50%),radial-gradient(circle at 50% 50%,transparent 74%,var(--grid) 74.5%,transparent 75%);}
+  .radar-crosshair{position:absolute;inset:0;background:linear-gradient(90deg,transparent 49.5%,var(--grid) 49.5%,var(--grid) 50.5%,transparent 50.5%),linear-gradient(0deg,transparent 49.5%,var(--grid) 49.5%,var(--grid) 50.5%,transparent 50.5%);}
+  .radar-sweep{position:absolute;top:50%;left:50%;width:50%;height:2px;transform-origin:left center;background:linear-gradient(90deg,var(--green),transparent);box-shadow:0 0 6px var(--green);animation:sweep 3s linear infinite;}
+  @keyframes sweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .blip{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);cursor:pointer;transition:all 0.2s;border:2px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:bold;}
+  .blip:hover{transform:translate(-50%,-50%) scale(1.4);}
+  .blip.unknown{color:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse-amber 1.5s infinite;}
+  .blip.enemy{color:var(--red);box-shadow:0 0 8px var(--red);animation:pulse-red 0.8s infinite;}
+  .blip.friendly{color:var(--blue);box-shadow:0 0 8px var(--blue);}
+  .blip.missile{color:var(--red);box-shadow:0 0 12px var(--red);width:10px;height:10px;border-radius:2px;animation:pulse-red 0.5s infinite;}
+  .blip.engaged{opacity:0.3;animation:none;}
+  .blip.held{border-style:dashed;}
+  .blip.selected{outline:2px solid white;outline-offset:3px;}
+  .blip.agent-targeting{outline:2px solid var(--purple);outline-offset:3px;animation:agent-pulse 0.4s infinite;}
+  @keyframes pulse-amber{0%,100%{opacity:1;}50%{opacity:0.4;}}
+  @keyframes pulse-red{0%,100%{opacity:1;}50%{opacity:0.5;}}
+  @keyframes agent-pulse{0%,100%{box-shadow:0 0 12px var(--purple);}50%{box-shadow:0 0 24px var(--purple);}}
+  .contact-card{border:1px solid var(--border);margin-bottom:8px;border-radius:2px;cursor:pointer;transition:border-color 0.15s,background 0.15s;padding:10px 12px;}
+  .contact-card:hover{border-color:var(--green-dim);background:rgba(0,255,65,0.03);}
+  .contact-card.selected{border-color:var(--green);background:rgba(0,255,65,0.07);}
+  .contact-card.enemy-card{border-left:3px solid var(--red);}
+  .contact-card.friendly-card{border-left:3px solid var(--blue);}
+  .contact-card.missile-card{border-left:3px solid var(--red);background:rgba(255,34,51,0.04);}
+  .contact-card.unknown-card{border-left:3px solid var(--amber);}
+  .contact-card.engaged-card{opacity:0.45;}
+  .contact-card.agent-targeting-card{border-color:var(--purple);background:rgba(204,68,255,0.06);}
+  .contact-id{font-size:13px;font-weight:bold;letter-spacing:1px;}
+  .contact-meta{font-size:10px;color:var(--grey);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;}
+  .contact-affil{font-size:9px;letter-spacing:2px;padding:2px 6px;border-radius:1px;float:right;margin-top:-2px;}
+  .affil-unknown{color:var(--amber);border:1px solid var(--amber);}
+  .affil-enemy{color:var(--red);border:1px solid var(--red);}
+  .affil-friendly{color:var(--blue);border:1px solid var(--blue);}
+  .affil-hostile{color:var(--red);border:1px solid var(--red);background:rgba(255,34,51,0.1);}
+  .btn{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:9px 12px;border:1px solid;border-radius:2px;cursor:pointer;transition:all 0.15s;text-transform:uppercase;width:100%;text-align:left;}
+  .btn:disabled{opacity:0.3;cursor:not-allowed;}
+  .btn-scan{color:var(--amber);border-color:var(--amber);background:transparent;}
+  .btn-scan:hover:not(:disabled){background:rgba(255,179,0,0.1);}
+  .btn-gun{color:var(--red);border-color:var(--red);background:transparent;}
+  .btn-gun:hover:not(:disabled){background:rgba(255,34,51,0.1);}
+  .btn-abm{color:var(--green);border-color:var(--green);background:transparent;}
+  .btn-abm:hover:not(:disabled){background:rgba(0,255,65,0.07);}
+  .btn-hold{color:var(--blue);border-color:var(--blue);background:transparent;}
+  .btn-hold:hover:not(:disabled){background:rgba(0,212,255,0.07);}
+  .btn-report{color:#000;border-color:var(--green);background:var(--green);font-weight:bold;}
+  .btn-report:hover:not(:disabled){background:#00cc33;}
+  .btn-reset{color:var(--grey);border-color:var(--grey);background:transparent;}
+  .btn-reset:hover{color:var(--white);border-color:var(--white);}
+  .btn-agent-run{color:var(--purple);border-color:var(--purple);background:transparent;}
+  .btn-agent-run:hover:not(:disabled){background:rgba(204,68,255,0.1);}
+  .btn-agent-stop{color:var(--red);border-color:var(--red);background:rgba(255,34,51,0.15);}
+  .btn-agent-stop:hover:not(:disabled){background:rgba(255,34,51,0.25);}
+  .action-grid{display:grid;gap:6px;margin-bottom:12px;}
+  .selected-info{border:1px solid var(--green-dim);padding:10px 12px;margin-bottom:10px;font-size:11px;background:rgba(0,255,65,0.03);border-radius:2px;}
+  .sel-title{font-size:9px;color:var(--grey);letter-spacing:2px;margin-bottom:6px;}
+  .sel-val{color:var(--green);}
+  .sel-none{color:var(--grey);font-style:italic;}
+  .log-entry{font-size:10px;padding:5px 0;border-bottom:1px solid var(--grid);line-height:1.5;}
+  .log-time{color:var(--grey);margin-right:8px;}
+  .log-ok{color:var(--green);}
+  .log-warn{color:var(--amber);}
+  .log-error{color:var(--red);}
+  .log-info{color:var(--blue);}
+  .log-agent{color:var(--purple);}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .metric-box{border:1px solid var(--border);padding:10px 10px 8px;border-radius:2px;text-align:center;}
+  .metric-label{font-size:9px;color:var(--grey);letter-spacing:2px;display:block;}
+  .metric-val{font-size:20px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--green);display:block;line-height:1.2;}
+  .metric-val.neg{color:var(--red);}
+  .task-box{border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;font-size:10px;color:var(--grey);line-height:1.7;border-radius:2px;width:100%;}
+  .task-diff{display:inline-block;font-size:9px;letter-spacing:2px;padding:2px 8px;margin-bottom:8px;border-radius:1px;}
+  .diff-easy{color:#00ff41;border:1px solid #00ff41;}
+  .diff-medium{color:var(--amber);border:1px solid var(--amber);}
+  .diff-hard{color:var(--red);border:1px solid var(--red);}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:520px;max-height:80vh;overflow-y:auto;padding:24px;font-size:12px;}
+  .modal h2{font-family:'Rajdhani',sans-serif;font-size:20px;letter-spacing:3px;margin-bottom:16px;color:var(--green);}
+  .modal label{display:block;color:var(--grey);font-size:10px;letter-spacing:2px;margin:12px 0 4px;}
+  .modal textarea{width:100%;background:var(--bg);border:1px solid var(--green-dim);color:var(--green);font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px;resize:vertical;min-height:80px;border-radius:2px;}
+  .modal-actions{display:flex;gap:8px;margin-top:16px;}
+  .modal-engagements{font-size:10px;color:var(--grey);margin-top:8px;line-height:1.8;}
+  .eng-row{display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--grid);}
+  .eng-id{color:var(--white);flex:1;}
+  .eng-act{color:var(--green);}
+  .eng-act.kill{color:var(--red);}
+  .eng-act.abm{color:var(--green);}
+  .eng-act.held{color:var(--blue);}
+  .done-banner{display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);padding:20px 32px;text-align:center;z-index:800;font-family:'Rajdhani',sans-serif;}
+  .done-banner.visible{display:block;}
+  .done-banner h3{font-size:24px;letter-spacing:4px;color:var(--green);}
+  .done-banner p{color:var(--grey);margin-top:6px;font-size:13px;}
+  .done-banner .score{font-size:40px;color:var(--green);font-weight:700;}
+  .diff-select{display:flex;gap:6px;margin-bottom:10px;}
+  .diff-btn{flex:1;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:6px 4px;border:1px solid var(--border);background:transparent;color:var(--grey);cursor:pointer;border-radius:1px;transition:all 0.15s;}
+  .diff-btn.active-easy{color:#00ff41;border-color:#00ff41;background:rgba(0,255,65,0.05);}
+  .diff-btn.active-medium{color:var(--amber);border-color:var(--amber);background:rgba(255,179,0,0.05);}
+  .diff-btn.active-hard{color:var(--red);border-color:var(--red);background:rgba(255,34,51,0.05);}
+  .divider{border:none;border-top:1px solid var(--border);margin:10px 0;}
+  .hint-box{background:rgba(0,255,65,0.03);border:1px solid var(--border);border-left:2px solid var(--green-dim);padding:8px 10px;font-size:10px;color:var(--grey);margin-bottom:10px;line-height:1.7;width:100%;}
+  .mode-toggle{display:flex;margin-bottom:10px;border:1px solid var(--border);border-radius:2px;overflow:hidden;}
+  .mode-btn{flex:1;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:7px 4px;background:transparent;border:none;color:var(--grey);cursor:pointer;transition:all 0.15s;text-align:center;}
+  .mode-btn.active-manual{color:#00ff41;background:rgba(0,255,65,0.08);}
+  .mode-btn.active-agent{color:var(--purple);background:rgba(204,68,255,0.08);}
+  .mode-btn:first-child{border-right:1px solid var(--border);}
+  .agent-bar{border:1px solid var(--purple);background:rgba(204,68,255,0.06);padding:8px 12px;margin-bottom:10px;border-radius:2px;font-size:10px;display:none;}
+  .agent-bar.visible{display:block;}
+  .agent-bar-title{color:var(--purple);letter-spacing:2px;font-size:9px;margin-bottom:4px;}
+  .agent-bar-status{color:var(--white);}
+  .agent-bar-next{color:var(--grey);margin-top:3px;}
+  .speed-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:10px;}
+  .speed-row label{color:var(--grey);letter-spacing:1px;white-space:nowrap;}
+  .speed-row input[type=range]{flex:1;accent-color:var(--purple);}
+  .speed-row span{color:var(--purple);min-width:46px;text-align:right;}
+  .score-row{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--grid);font-size:10px;}
+  .score-task{flex:1;color:var(--grey);}
+  .score-val{color:var(--green);}
+  .score-val.fail{color:var(--red);}
+  .score-val.partial{color:var(--amber);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DEFENSE<span>-AI</span> &nbsp;|&nbsp; AIR DEFENSE COMMAND</div>
+  <div class="status-bar">
+    <div class="status-item"><span class="status-label">SYSTEM</span><span class="status-val blink">● ONLINE</span></div>
+    <div class="status-item"><span class="status-label">MODE</span><span class="status-val" id="hdr-mode">MANUAL</span></div>
+    <div class="status-item"><span class="status-label">MISSION</span><span class="status-val" id="hdr-mission">—</span></div>
+    <div class="status-item"><span class="status-label">STEP</span><span class="status-val" id="hdr-step">0</span></div>
+    <div class="status-item"><span class="status-label">SCORE</span><span class="status-val" id="hdr-score">—</span></div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- LEFT: CONTACTS -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>RADAR CONTACTS</span>
+      <span id="contact-count">0 CONTACTS</span>
+    </div>
+    <div class="panel-body" id="contacts-list">
+      <div style="color:var(--grey);font-size:11px;margin-top:20px;text-align:center;">No active mission.<br>Start a new mission →</div>
+    </div>
+  </div>
+
+  <!-- CENTER: RADAR -->
+  <div class="center-panel">
+    <div class="panel-header">
+      <span>RADAR SCOPE / TACTICAL DISPLAY</span>
+      <span id="scope-diff" style="color:var(--grey)">NO MISSION</span>
+    </div>
+    <div class="radar-wrap">
+      <div class="radar-scope" id="radar-scope">
+        <div class="radar-rings"></div>
+        <div class="radar-crosshair"></div>
+        <div class="radar-sweep"></div>
+      </div>
+      <div class="task-box">
+        <span class="task-diff" id="task-diff">—</span><br>
+        <span id="task-desc">Start a mission to receive your orders.</span>
+      </div>
+      <div class="hint-box" id="hint-box">
+        💡 Select a difficulty and press <strong>NEW MISSION</strong> to begin. Use <strong>AI AGENT</strong> mode to watch the intelligent agent play automatically.
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: COMMAND CONSOLE -->
+  <div class="panel" style="border-right:none;">
+    <div class="panel-header"><span>COMMAND CONSOLE</span></div>
+    <div class="panel-body">
+
+      <div style="font-size:9px;color:var(--grey);letter-spacing:2px;margin-bottom:6px;">DIFFICULTY</div>
+      <div class="diff-select">
+        <button class="diff-btn active-easy" onclick="setDiff('task_easy',this)">EASY</button>
+        <button class="diff-btn" onclick="setDiff('task_medium',this)">MED</button>
+        <button class="diff-btn" onclick="setDiff('task_hard',this)">HARD</button>
+      </div>
+
+      <div style="font-size:9px;color:var(--grey);letter-spacing:2px;margin-bottom:6px;">CONTROL MODE</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active-manual" id="mode-manual-btn" onclick="setMode('manual')">👤 MANUAL</button>
+        <button class="mode-btn" id="mode-agent-btn" onclick="setMode('agent')">🤖 AI AGENT</button>
+      </div>
+
+      <button class="btn btn-reset" onclick="newMission()" style="margin-bottom:10px;">▶ NEW MISSION</button>
+
+      <hr class="divider">
+
+      <div class="metrics">
+        <div class="metric-box"><span class="metric-label">REWARD</span><span class="metric-val" id="m-reward">0.00</span></div>
+        <div class="metric-box"><span class="metric-label">CUM. REWARD</span><span class="metric-val" id="m-cum">0.00</span></div>
+        <div class="metric-box"><span class="metric-label">SCORE</span><span class="metric-val" id="m-score">—</span></div>
+        <div class="metric-box"><span class="metric-label">STEPS</span><span class="metric-val" id="m-steps">0/0</span></div>
+      </div>
+
+      <!-- Agent status (agent mode only) -->
+      <div class="agent-bar" id="agent-bar">
+        <div class="agent-bar-title">🤖 AI AGENT STATUS</div>
+        <div class="agent-bar-status" id="agent-status">Idle — start a mission and press RUN AGENT</div>
+        <div class="agent-bar-next" id="agent-next"></div>
+      </div>
+
+      <!-- Selected target (manual mode only) -->
+      <div class="selected-info" id="sel-info-box">
+        <div class="sel-title">SELECTED TARGET</div>
+        <div id="sel-display" class="sel-none">None — click a contact or blip</div>
+      </div>
+
+      <!-- MANUAL ACTIONS -->
+      <div id="manual-actions">
+        <div class="action-grid">
+          <button class="btn btn-scan"   id="btn-scan"   onclick="doAction('scan_airspace')"       disabled>📡 SCAN AIRSPACE</button>
+          <button class="btn btn-gun"    id="btn-gun"    onclick="doAction('engage_machine_gun')"   disabled>💥 MACHINE GUN</button>
+          <button class="btn btn-abm"    id="btn-abm"    onclick="doAction('launch_abm')"           disabled>🚀 LAUNCH ABM</button>
+          <button class="btn btn-hold"   id="btn-hold"   onclick="doAction('hold_fire')"            disabled>🛡 HOLD FIRE</button>
+          <button class="btn btn-report" id="btn-report" onclick="openReport()"                     disabled>📋 SUBMIT REPORT</button>
+        </div>
+      </div>
+
+      <!-- AGENT ACTIONS -->
+      <div id="agent-actions" style="display:none;">
+        <div class="speed-row">
+          <label>SPEED</label>
+          <input type="range" min="200" max="2500" step="100" value="900" id="agent-speed"
+                 oninput="document.getElementById('spd-val').textContent=this.value+'ms'">
+          <span id="spd-val">900ms</span>
+        </div>
+        <div class="action-grid">
+          <button class="btn btn-agent-run"  id="btn-agent-run"  onclick="agentStart()" disabled>🤖 RUN AGENT</button>
+          <button class="btn btn-agent-stop" id="btn-agent-stop" onclick="agentStop()"  disabled style="display:none;">⏹ STOP AGENT</button>
+          <button class="btn btn-report"     id="btn-agent-rep"  onclick="agentSubmitReport()" disabled>📋 SUBMIT REPORT</button>
+        </div>
+        <div style="font-size:9px;color:var(--grey);letter-spacing:2px;margin:10px 0 6px;">SESSION SCORES</div>
+        <div id="scoreboard"><div style="color:var(--grey);font-style:italic;font-size:10px;">No missions completed yet.</div></div>
+      </div>
+
+      <hr class="divider">
+      <div style="font-size:9px;color:var(--grey);letter-spacing:2px;margin-bottom:6px;">ENGAGEMENT LOG</div>
+      <div id="log-panel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-bg" id="report-modal">
+  <div class="modal">
+    <h2>📋 TACTICAL REPORT</h2>
+    <p style="color:var(--grey);font-size:11px;">Summarise your engagement decisions for HQ evaluation.</p>
+    <label>DECISIONS SUMMARY (use tactical terminology)</label>
+    <textarea id="report-summary" placeholder="e.g. Scanned all contacts via IFF radar. Engaged enemy jets with machine gun after confirming hostile affiliation. Intercepted inbound missiles with ABM. Held fire on all friendly aircraft with valid IFF transponder..."></textarea>
+    <label>ENGAGEMENT LOG (auto-filled)</label>
+    <div class="modal-engagements" id="modal-eng-list">No engagements recorded.</div>
+    <div class="modal-actions">
+      <button class="btn btn-report" onclick="submitReport()">SUBMIT TO HQ</button>
+      <button class="btn btn-reset"  onclick="closeReport()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- DONE BANNER -->
+<div class="done-banner" id="done-banner">
+  <h3 id="done-title">MISSION COMPLETE</h3>
+  <div class="score" id="done-score">0.00</div>
+  <p id="done-feedback">—</p>
+</div>
+
+<script>
+// ─── GLOBAL STATE ──────────────────────────────────────────────────────────
+const S = {
+  contacts:{}, selectedId:null, engaged:[], held:[],
+  missionActive:false, cumReward:0, lastReward:0,
+  steps:0, maxSteps:10, score:0, taskId:'task_easy',
+  difficulty:'easy', done:false, engagementHistory:[],
+  mode:'manual',
+};
+
+// ─── AGENT STATE ───────────────────────────────────────────────────────────
+const AG = {
+  running:false, timer:null,
+  scanned:{}, missiles:[], enemies:[], friendlies:[],
+  engaged:new Set(), reportSubmitted:false,
+  targetingId:null, sessionScores:[],
+};
+
+const API = '';
+
+// ─── DIFFICULTY ────────────────────────────────────────────────────────────
+function setDiff(taskId, btn) {
+  S.taskId = taskId;
+  document.querySelectorAll('.diff-btn').forEach(b => b.className = 'diff-btn');
+  const map = {task_easy:'easy', task_medium:'medium', task_hard:'hard'};
+  btn.classList.add('active-' + map[taskId]);
+}
+
+// ─── MODE ──────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  S.mode = mode;
+  document.getElementById('hdr-mode').textContent = mode === 'agent' ? 'AI AGENT' : 'MANUAL';
+  document.getElementById('mode-manual-btn').className = 'mode-btn' + (mode==='manual' ? ' active-manual' : '');
+  document.getElementById('mode-agent-btn').className  = 'mode-btn' + (mode==='agent'  ? ' active-agent'  : '');
+  document.getElementById('manual-actions').style.display = mode==='manual' ? '' : 'none';
+  document.getElementById('agent-actions').style.display  = mode==='agent'  ? '' : 'none';
+  document.getElementById('sel-info-box').style.display   = mode==='manual' ? '' : 'none';
+  document.getElementById('agent-bar').classList.toggle('visible', mode==='agent');
+  if (mode === 'agent') agentStop();
+}
+
+// ─── NEW MISSION ───────────────────────────────────────────────────────────
+async function newMission() {
+  agentStop();
+  hideDone();
+  clearLog();
+  Object.assign(S, {contacts:{}, selectedId:null, engaged:[], held:[], cumReward:0,
+    lastReward:0, steps:0, score:0, done:false, engagementHistory:[]});
+  agentReset();
+  renderContacts();
+  try {
+    const r = await fetch(API+'/reset', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task_id:S.taskId})});
+    const obs = await r.json();
+    handleObs(obs, 'MISSION_START');
+    S.missionActive = true;
+    enableButtons(true);
+    log('info', `Mission started — ${(obs.difficulty||'').toUpperCase()}`);
+    log('info', obs.feedback);
+    if (S.mode==='agent') setAgentStatus('Mission loaded. Press RUN AGENT to begin.','');
+  } catch(e) { log('error', 'Server connection failed: '+e.message); }
+}
+
+// ─── MANUAL ACTIONS ────────────────────────────────────────────────────────
+async function doAction(actionType) {
+  if (!S.missionActive || S.done) return;
+  const tid = S.selectedId;
+  if (!tid) { log('warn', 'Select a target first.'); return; }
+  try {
+    const r = await fetch(API+'/step', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:{action_type:actionType, target_id:tid}})});
+    const obs = await r.json();
+    if (['engage_machine_gun','launch_abm','hold_fire'].includes(actionType) && tid)
+      if (!S.engagementHistory.find(e=>e.target_id===tid))
+        S.engagementHistory.push({target_id:tid, action:actionType});
+    handleObs(obs, actionType);
+    logAction(actionType, tid, obs);
+  } catch(e) { log('error', 'Action failed: '+e.message); }
+}
+
+// ─── AGENT INTERNALS ───────────────────────────────────────────────────────
+function agentReset() {
+  Object.assign(AG, {scanned:{}, missiles:[], enemies:[], friendlies:[], engaged:new Set(), reportSubmitted:false, targetingId:null});
+}
+
+function agentStart() {
+  if (!S.missionActive || S.done) { log('warn','🤖 Start a mission first.'); return; }
+  AG.running = true;
+  document.getElementById('btn-agent-run').style.display = 'none';
+  document.getElementById('btn-agent-stop').style.display = '';
+  document.getElementById('btn-agent-stop').disabled = false;
+  document.getElementById('btn-agent-rep').disabled = true;
+  log('agent', '🤖 AI Agent activated — taking control');
+  agentTick();
+}
+
+function agentStop() {
+  AG.running = false;
+  clearTimeout(AG.timer);
+  document.getElementById('btn-agent-run').style.display = '';
+  document.getElementById('btn-agent-stop').style.display = 'none';
+  if (S.missionActive) {
+    document.getElementById('btn-agent-run').disabled = false;
+    document.getElementById('btn-agent-rep').disabled = false;
+  }
+  setAgentStatus('Paused','');
+  if (AG.targetingId) { AG.targetingId=null; renderContacts(); renderRadar(); }
+}
+
+function agentDecide() {
+  // Absorb scanned contacts from radar
+  Object.values(S.contacts).forEach(c => {
+    if (c.scanned && !AG.scanned[c.target_id]) {
+      AG.scanned[c.target_id] = c;
+      const a=c.affiliation||'', t=c.type||'';
+      if (a==='HOSTILE'&&t==='missile' &&!AG.missiles.includes(c.target_id))  AG.missiles.push(c.target_id);
+      else if (a==='ENEMY'             &&!AG.enemies.includes(c.target_id))    AG.enemies.push(c.target_id);
+      else if (a==='FRIENDLY'          &&!AG.friendlies.includes(c.target_id)) AG.friendlies.push(c.target_id);
+    }
+  });
+  // Phase 1: scan unknowns
+  for (const c of Object.values(S.contacts))
+    if (!c.scanned && !AG.scanned[c.target_id])
+      return {action_type:'scan_airspace', target_id:c.target_id, _lbl:'📡 SCAN '+c.target_id};
+  // Phase 2a: ABM missiles first
+  for (const m of AG.missiles)
+    if (!AG.engaged.has(m)) return {action_type:'launch_abm', target_id:m, _lbl:'🚀 ABM → '+m};
+  // Phase 2b: machine gun enemy jets
+  for (const e of AG.enemies)
+    if (!AG.engaged.has(e)) return {action_type:'engage_machine_gun', target_id:e, _lbl:'💥 GUN → '+e};
+  // Phase 2c: hold fire on friendlies
+  for (const f of AG.friendlies)
+    if (!AG.engaged.has(f)) return {action_type:'hold_fire', target_id:f, _lbl:'🛡 HOLD → '+f};
+  // Phase 3: submit report
+  if (!AG.reportSubmitted) return {action_type:'__report__', _lbl:'📋 Submitting tactical report'};
+  return null;
+}
+
+async function agentTick() {
+  if (!AG.running || S.done || !S.missionActive) { agentStop(); return; }
+  const dec = agentDecide();
+  if (!dec) { setAgentStatus('All contacts processed.',''); agentStop(); return; }
+  AG.targetingId = dec.target_id || null;
+  setAgentStatus('Executing: '+dec._lbl, '');
+  renderContacts(); renderRadar();
+  if (dec.action_type === '__report__') { AG.reportSubmitted=true; await agentSubmitReport(); agentStop(); return; }
+  try {
+    const r = await fetch(API+'/step', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:{action_type:dec.action_type, target_id:dec.target_id}})});
+    const obs = await r.json();
+    if (dec.target_id) AG.engaged.add(dec.target_id);
+    if (['engage_machine_gun','launch_abm'].includes(dec.action_type) && dec.target_id)
+      if (!S.engagementHistory.find(e=>e.target_id===dec.target_id))
+        S.engagementHistory.push({target_id:dec.target_id, action:dec.action_type});
+    handleObs(obs, dec.action_type);
+    logAction(dec.action_type, dec.target_id, obs);
+    if (S.done) { agentStop(); return; }
+    const nxt = agentDecide();
+    setAgentStatus('Last: '+dec._lbl, nxt ? 'Next → '+nxt._lbl : 'Preparing report...');
+    AG.timer = setTimeout(agentTick, parseInt(document.getElementById('agent-speed').value)||900);
+  } catch(e) { log('error','🤖 Agent error: '+e.message); agentStop(); }
+}
+
+async function agentSubmitReport() {
+  if (!S.missionActive) return;
+  // Only weapon engagements — NOT hold_fire (fixes medium/hard scoring bug)
+  const engagements = [
+    ...AG.missiles.map(id => ({target_id:id, action:'launch_abm'})),
+    ...AG.enemies.map(id  => ({target_id:id, action:'engage_machine_gun'})),
+  ];
+  const summary = `TACTICAL REPORT — AIR DEFENSE ENGAGEMENT SUMMARY
+
+IFF scan and discrimination protocol applied to all radar contacts via scan_airspace.
+Full identification obtained before any engagement — preventing fratricide.
+
+Threat Assessment:
+  Enemy fighter jets identified: ${AG.enemies.length}. No valid IFF transponder. Hostile bearing confirmed.
+  Hostile missiles detected: ${AG.missiles.length}. Fast low-altitude track. No IFF. CRITICAL threat.
+  Friendly aircraft confirmed: ${AG.friendlies.length}. Valid IFF transponder verified. Hold fire applied.
+
+Engagements:
+  Enemy jets [${AG.enemies.join(', ')||'none'}] neutralised with machine gun fire.
+  Inbound missiles [${AG.missiles.join(', ')||'none'}] intercepted with ABM launch.
+  Friendly aircraft [${AG.friendlies.join(', ')||'none'}] protected — hold fire, IFF confirmed.
+
+Spoofing check: cross-referenced IFF code, speed, altitude, bearing and threat level
+via radar scan before any engagement authorisation. Discrimination applied throughout.
+
+Outcome: All identified threats neutralised. Zero fratricide. Mission complete.`;
+  log('agent', '📋 Submitting tactical report to HQ...');
+  setAgentStatus('Submitting report...','');
+  try {
+    const r = await fetch(API+'/step', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:{action_type:'submit_report', engagements, decisions_summary:summary}})});
+    const obs = await r.json();
+    handleObs(obs, 'submit_report');
+    log(obs.partial_score>=0.8?'ok':'warn', obs.feedback||'');
+    AG.sessionScores.push({task:S.taskId.replace('task_','').toUpperCase(), score:obs.partial_score||0, reward:S.cumReward, solved:(obs.partial_score||0)>=0.8});
+    renderScoreboard();
+  } catch(e) { log('error','Report failed: '+e.message); }
+}
+
+function setAgentStatus(s,n) {
+  document.getElementById('agent-status').textContent = s;
+  document.getElementById('agent-next').textContent = n||'';
+}
+
+function renderScoreboard() {
+  const el = document.getElementById('scoreboard');
+  if (!AG.sessionScores.length) { el.innerHTML='<div style="color:var(--grey);font-style:italic;font-size:10px;">No missions completed yet.</div>'; return; }
+  el.innerHTML = AG.sessionScores.slice(-6).reverse().map(s => {
+    const cls = s.solved ? 'score-val' : s.score>=0.5 ? 'score-val partial' : 'score-val fail';
+    const icon = s.solved ? '✓' : s.score>=0.5 ? '~' : '✗';
+    return `<div class="score-row"><span class="score-task">${s.task}</span><span class="${cls}">${icon} ${s.score.toFixed(4)}</span><span style="color:var(--grey)">${s.reward>=0?'+':''}${s.reward.toFixed(2)}</span></div>`;
+  }).join('');
+}
+
+// ─── OBSERVATION HANDLER ───────────────────────────────────────────────────
+function handleObs(obs, act) {
+  if (!obs) return;
+  if (obs.radar_contacts) obs.radar_contacts.forEach(c => { S.contacts[c.target_id]=c; });
+  S.engaged=obs.engaged_targets||[]; S.held=obs.held_targets||[];
+  S.steps=obs.steps_taken||0; S.maxSteps=obs.max_steps||10;
+  S.score=obs.partial_score||0; S.done=obs.done||false;
+  S.difficulty=obs.difficulty||S.difficulty;
+  if (obs.reward!==undefined) { S.lastReward=obs.reward; S.cumReward=Math.round((S.cumReward+obs.reward)*1000)/1000; }
+  if (obs.task_description) {
+    document.getElementById('task-desc').textContent=obs.task_description;
+    const d=obs.difficulty||'easy';
+    const de=document.getElementById('task-diff');
+    de.textContent=d.toUpperCase(); de.className='task-diff diff-'+d;
+    document.getElementById('scope-diff').textContent=d.toUpperCase();
+  }
+  if (obs.feedback) document.getElementById('hint-box').innerHTML='💡 '+obs.feedback;
+  if (obs.mission_id) document.getElementById('hdr-mission').textContent=obs.mission_id.slice(0,8).toUpperCase();
+  updateMetrics(); renderContacts(); renderRadar();
+  if (obs.done) { showDone(obs); enableButtons(false); }
+}
+
+// ─── METRICS ──────────────────────────────────────────────────────────────
+function updateMetrics() {
+  const r=S.lastReward, cr=S.cumReward;
+  const re=document.getElementById('m-reward');
+  re.textContent=(r>=0?'+':'')+r.toFixed(3); re.className='metric-val'+(r<0?' neg':'');
+  const ce=document.getElementById('m-cum');
+  ce.textContent=(cr>=0?'+':'')+cr.toFixed(3); ce.className='metric-val'+(cr<0?' neg':'');
+  document.getElementById('m-score').textContent=S.score>0?S.score.toFixed(4):'—';
+  document.getElementById('m-steps').textContent=S.steps+'/'+S.maxSteps;
+  document.getElementById('hdr-step').textContent=S.steps;
+  document.getElementById('hdr-score').textContent=S.score>0?S.score.toFixed(3):'—';
+}
+
+// ─── CONTACTS RENDER ───────────────────────────────────────────────────────
+function renderContacts() {
+  const list=document.getElementById('contacts-list');
+  const contacts=Object.values(S.contacts);
+  document.getElementById('contact-count').textContent=contacts.length+' CONTACTS';
+  if (!contacts.length) { list.innerHTML='<div style="color:var(--grey);font-size:11px;text-align:center;margin-top:20px;">No contacts detected.</div>'; return; }
+  list.innerHTML=contacts.map(c => {
+    const affil=c.affiliation||'UNKNOWN', isEng=S.engaged.includes(c.target_id),
+          isHeld=S.held.includes(c.target_id), isSel=S.selectedId===c.target_id,
+          isAG=AG.targetingId===c.target_id, ctype=c.type||'unknown';
+    let cc='contact-card';
+    if (affil==='ENEMY') cc+=' enemy-card';
+    else if (affil==='FRIENDLY') cc+=' friendly-card';
+    else if (affil==='HOSTILE'&&ctype==='missile') cc+=' missile-card';
+    else cc+=' unknown-card';
+    if (isEng) cc+=' engaged-card';
+    if (isSel) cc+=' selected';
+    if (isAG)  cc+=' agent-targeting-card';
+    const status=isEng?'🔴 ENGAGED':isHeld?'🔵 HELD':c.scanned?'✅ SCANNED':'❓ UNKNOWN';
+    return `<div class="${cc}" onclick="selectContact('${c.target_id}')">
+      <span class="contact-affil affil-${affil.toLowerCase()}">${affil}</span>
+      <div class="contact-id">${c.target_id}${isAG?' <span style="color:var(--purple)">[AI]</span>':''}</div>
+      <div class="contact-meta">
+        <span>${(c.model||ctype).toUpperCase()}</span>
+        <span>${(c.speed||'—').toUpperCase()}</span>
+        <span>${(c.altitude||'—').toUpperCase()} ALT</span>
+        <span>${c.bearing!==undefined?c.bearing+'°':'—'}</span>
+      </div>
+      <div class="contact-meta" style="margin-top:4px;color:${isEng?'var(--red)':isHeld?'var(--blue)':'var(--grey)'}">
+        ${status} ${c.iff_code?'| IFF:'+c.iff_code:'| NO IFF'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── RADAR RENDER ──────────────────────────────────────────────────────────
+function renderRadar() {
+  const scope=document.getElementById('radar-scope');
+  scope.querySelectorAll('.blip').forEach(b=>b.remove());
+  const cx=150, cy=150, r=130;
+  Object.values(S.contacts).forEach((c,i) => {
+    const angle=((c.bearing||(i*47))*Math.PI)/180;
+    const dist=c.altitude==='high'?0.4:c.altitude==='medium'?0.65:0.85;
+    const x=cx+r*dist*Math.sin(angle), y=cy-r*dist*Math.cos(angle);
+    const blip=document.createElement('div');
+    blip.className='blip'; blip.style.left=x+'px'; blip.style.top=y+'px';
+    const affil=c.affiliation||'UNKNOWN', isEng=S.engaged.includes(c.target_id),
+          isHeld=S.held.includes(c.target_id), isSel=S.selectedId===c.target_id,
+          isAG=AG.targetingId===c.target_id;
+    if (isEng) blip.classList.add('engaged');
+    else if (isHeld) blip.classList.add('held','friendly');
+    else if (affil==='ENEMY') blip.classList.add('enemy');
+    else if (affil==='FRIENDLY') blip.classList.add('friendly');
+    else if (affil==='HOSTILE'&&c.type==='missile') blip.classList.add('missile');
+    else blip.classList.add('unknown');
+    if (isSel) blip.classList.add('selected');
+    if (isAG)  blip.classList.add('agent-targeting');
+    blip.textContent=c.type==='missile'?'▲':'✦';
+    blip.title=c.target_id+' | '+affil;
+    blip.onclick=()=>selectContact(c.target_id);
+    scope.appendChild(blip);
+  });
+}
+
+// ─── SELECT CONTACT ────────────────────────────────────────────────────────
+function selectContact(tid) {
+  S.selectedId=tid;
+  const c=S.contacts[tid], sel=document.getElementById('sel-display');
+  if (c) {
+    sel.className='sel-val';
+    sel.innerHTML=`<strong>${tid}</strong><br>TYPE: ${(c.type||'?').toUpperCase()}<br>AFFIL: ${c.affiliation||'UNKNOWN'}<br>SPEED: ${(c.speed||'?').toUpperCase()} | ALT: ${(c.altitude||'?').toUpperCase()}<br>BEARING: ${c.bearing!==undefined?c.bearing+'°':'?'}<br>IFF: ${c.iff_code||'NONE'}<br>STATUS: ${S.engaged.includes(tid)?'ENGAGED':S.held.includes(tid)?'HELD':'ACTIVE'}`;
+  }
+  renderContacts(); renderRadar();
+}
+
+// ─── LOG ───────────────────────────────────────────────────────────────────
+let logStep=0;
+function log(type, msg) {
+  logStep++;
+  const panel=document.getElementById('log-panel');
+  const div=document.createElement('div'); div.className='log-entry';
+  div.innerHTML=`<span class="log-time">T+${String(logStep).padStart(3,'0')}</span><span class="log-${type}">${msg}</span>`;
+  panel.insertBefore(div, panel.firstChild);
+}
+function logAction(actionType, tid, obs) {
+  const reward=obs.reward!==undefined?(obs.reward>=0?'+':'')+obs.reward.toFixed(3):'';
+  const icons={scan_airspace:'📡',engage_machine_gun:'💥',launch_abm:'🚀',hold_fire:'🛡',submit_report:'📋'};
+  const type=obs.reward<0?'error':obs.reward>0?'ok':'warn';
+  log(type, `${icons[actionType]||'▸'} ${actionType.replace(/_/g,' ').toUpperCase()} [${tid||'—'}] → ${reward}`);
+  if (obs.feedback) log('info', obs.feedback);
+}
+function clearLog() { logStep=0; document.getElementById('log-panel').innerHTML=''; }
+
+// ─── MANUAL REPORT ─────────────────────────────────────────────────────────
+function openReport() {
+  const engDiv=document.getElementById('modal-eng-list');
+  const h=S.engagementHistory;
+  engDiv.innerHTML=h.length?h.map(e=>{
+    const act=e.action.replace(/_/g,' ').toUpperCase();
+    let cls='eng-act';
+    if(e.action==='engage_machine_gun')cls+=' kill';
+    if(e.action==='launch_abm')cls+=' abm';
+    if(e.action==='hold_fire')cls+=' held';
+    return `<div class="eng-row"><span class="eng-id">${e.target_id}</span><span class="${cls}">${act}</span></div>`;
+  }).join(''):'<span style="color:var(--grey)">No engagements yet.</span>';
+  document.getElementById('report-modal').classList.add('open');
+}
+function closeReport() { document.getElementById('report-modal').classList.remove('open'); }
+async function submitReport() {
+  const summary=document.getElementById('report-summary').value.trim();
+  if (!summary) { alert('Please provide a decisions summary.'); return; }
+  closeReport();
+  // Exclude hold_fire from report engagements (prevents fratricide scoring bug)
+  const engagements=S.engagementHistory.filter(e=>e.action!=='hold_fire');
+  try {
+    const r=await fetch(API+'/step', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:{action_type:'submit_report', decisions_summary:summary, engagements}})});
+    const obs=await r.json();
+    handleObs(obs,'submit_report');
+    log('info','📋 Report submitted to HQ');
+    if (obs.feedback) log(obs.partial_score>=0.8?'ok':'warn', obs.feedback);
+  } catch(e) { log('error','Report failed: '+e.message); }
+}
+
+// ─── DONE ──────────────────────────────────────────────────────────────────
+function showDone(obs) {
+  const score=obs.partial_score||0;
+  document.getElementById('done-title').textContent=score>=0.8?'MISSION ACCOMPLISHED':'MISSION ENDED';
+  document.getElementById('done-score').textContent=score.toFixed(4);
+  document.getElementById('done-feedback').textContent=obs.feedback||'';
+  document.getElementById('done-banner').classList.add('visible');
+  setTimeout(hideDone,8000);
+}
+function hideDone() { document.getElementById('done-banner').classList.remove('visible'); }
+
+// ─── ENABLE/DISABLE ────────────────────────────────────────────────────────
+function enableButtons(on) {
+  ['btn-scan','btn-gun','btn-abm','btn-hold','btn-report','btn-agent-run','btn-agent-rep'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled=!on;
+  });
+}
+</script>
+</body>
+</html>

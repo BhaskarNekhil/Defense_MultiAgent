@@ -1,0 +1,179 @@
+name: defense-ai
+version: "1.0.0"
+description: >
+  Defense AI is an air defense decision environment where an AI agent
+  acts as an air defense commander. Given a radar picture of incoming
+  threats (enemy jets, missiles) and friendly aircraft, the agent must:
+  scan contacts to identify friend or foe, engage enemy jets with machine
+  gun fire, intercept inbound missiles with anti-ballistic missiles (ABM),
+  hold fire on friendly aircraft, and submit a tactical report.
+  Fratricide (engaging a friendly) incurs severe penalties.
+
+tags:
+  - openenv
+  - defense
+  - reinforcement-learning
+  - agentic
+  - real-world
+
+author: defense-ai-team
+
+interface:
+  reset:
+    method: POST
+    path: /reset
+    body:
+      task_id:
+        type: string
+        required: false
+        description: "Pin to a specific task. One of: task_easy | task_medium | task_hard"
+
+  step:
+    method: POST
+    path: /step
+    body:
+      action_type:
+        type: string
+        required: true
+        description: "One of: scan_airspace | engage_machine_gun | launch_abm | hold_fire | submit_report"
+      target_id:
+        type: string
+        required: false
+      decisions_summary:
+        type: string
+        required: false
+      engagements:
+        type: array
+        required: false
+        description: "List of {target_id, action} for submit_report"
+
+  state:
+    method: GET
+    path: /state
+
+action_space:
+  type: structured
+  actions:
+    - name: scan_airspace
+      description: "Radar scan a contact to reveal true affiliation (ENEMY/FRIENDLY/HOSTILE)"
+    - name: engage_machine_gun
+      description: "Fire machine gun at a target — correct for enemy fighter jets"
+    - name: launch_abm
+      description: "Launch anti-ballistic missile to intercept an inbound missile"
+    - name: hold_fire
+      description: "Explicitly hold fire on a contact — correct for friendly aircraft"
+    - name: submit_report
+      description: "Final action — submit tactical report with engagement summary"
+
+observation_space:
+  mission_id:
+    type: string
+  task_id:
+    type: string
+  difficulty:
+    type: string
+    enum: [easy, medium, hard]
+  task_description:
+    type: string
+  radar_contacts:
+    type: array
+    description: "Radar contacts with partial or full info depending on scan status"
+  threats_in_scope:
+    type: array
+    description: "Target IDs the agent must evaluate"
+  action_result:
+    type: object
+    nullable: true
+  action_error:
+    type: string
+    nullable: true
+  engaged_targets:
+    type: array
+    description: "Targets the agent has engaged this episode"
+  held_targets:
+    type: array
+    description: "Targets the agent has explicitly held fire on"
+  partial_score:
+    type: number
+    description: "0.0-1.0 score, updated on submit_report"
+  feedback:
+    type: string
+  reward:
+    type: number
+  done:
+    type: boolean
+  steps_taken:
+    type: integer
+  max_steps:
+    type: integer
+
+tasks:
+  - id: task_easy
+    difficulty: easy
+    max_steps: 10
+    description: >
+      1-2 enemy fighter jets with no IFF transponder are detected. Scan
+      contacts to confirm hostile, then engage all with machine gun.
+      Submit report when threats are neutralised.
+    scoring:
+      all_enemies_engaged_correctly: 0.55
+      zero_fratricide: 0.15
+      correct_weapon_choice: 0.15
+      tactical_report_quality: 0.15
+
+  - id: task_medium
+    difficulty: medium
+    max_steps: 18
+    description: >
+      Mixed picture: enemy jets + friendly aircraft + 1 inbound missile.
+      Scan all contacts to discriminate. Engage enemy jets with machine gun,
+      intercept missile with ABM, hold fire on friendlies. Fratricide = mission failure.
+    scoring:
+      enemy_jets_neutralised: 0.35
+      missiles_intercepted: 0.25
+      zero_fratricide: 0.10
+      correct_weapon_per_type: 0.15
+      tactical_report_quality: 0.15
+
+  - id: task_hard
+    difficulty: hard
+    max_steps: 25
+    description: >
+      Saturation attack: many enemy jets + friendlies + multiple missiles.
+      Enemy jets may be SPOOFING IFF codes to appear friendly. Must cross-reference
+      IFF with speed/altitude/bearing to identify spoofers. Intercept all missiles,
+      neutralise all enemies, protect all friendlies.
+    scoring:
+      enemy_jets_neutralised: 0.30
+      missiles_intercepted: 0.25
+      zero_fratricide: 0.12
+      spoofers_identified: 0.08
+      correct_weapon_per_type: 0.10
+      tactical_report_quality: 0.15
+
+reward:
+  step_penalty: -0.02
+  scan_enemy_contact: +0.04
+  scan_friendly_contact: +0.04
+  scan_already_done: -0.02
+  engage_enemy_jet_correct: +0.15
+  engage_enemy_jet_wrong_tool: +0.05
+  engage_friendly_jet: -0.50
+  engage_missile_correct: +0.20
+  engage_missile_wrong_tool: -0.05
+  hold_friendly_correct: +0.08
+  hold_enemy: -0.10
+  report_all_enemies_neutralised: +0.40
+  report_all_missiles_intercepted: +0.30
+  report_zero_fratricide: +0.20
+  report_good_tactical_summary: +0.15
+  solve_bonus: +0.25
+
+episode:
+  termination:
+    - "submit_report action called"
+    - "steps_taken >= max_steps"
+  reset_behaviour: >
+    Fresh synthetic scenario generated on every reset().
+    Different seed each time — agent cannot memorise scenarios.
+  solve_threshold: 0.80
